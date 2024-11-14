@@ -2,53 +2,79 @@ import paho.mqtt.client as mqtt
 import RPi.GPIO as GPIO
 import time
 
-# Configuración de los pines GPIO para los servomotores
-SERVO_PIN_1 = 15
-SERVO_PIN_2 = 13
+# Configuración de los pines GPIO para los motores DC
+Motor_A_EN = 7
+Motor_B_EN = 11
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(SERVO_PIN_1, GPIO.OUT)
-GPIO.setup(SERVO_PIN_2, GPIO.OUT)
+Motor_A_Pin1 = 8
+Motor_A_Pin2 = 10
+Motor_B_Pin1 = 13
+Motor_B_Pin2 = 12
 
-# Configuración de PWM para los servomotores
-servo1 = GPIO.PWM(SERVO_PIN_1, 50)  # 50 Hz
-servo2 = GPIO.PWM(SERVO_PIN_2, 50)  # 50 Hz
+def motorStop():
+    GPIO.output(Motor_A_Pin1, GPIO.LOW)
+    GPIO.output(Motor_A_Pin2, GPIO.LOW)
+    GPIO.output(Motor_B_Pin1, GPIO.LOW)
+    GPIO.output(Motor_B_Pin2, GPIO.LOW)
+    GPIO.output(Motor_A_EN, GPIO.LOW)
+    GPIO.output(Motor_B_EN, GPIO.LOW)
 
-servo1.start(0)
-servo2.start(0)
+def setup():
+    global pwm_A, pwm_B
+    GPIO.setwarnings(False)
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setup(Motor_A_EN, GPIO.OUT)
+    GPIO.setup(Motor_B_EN, GPIO.OUT)
+    GPIO.setup(Motor_A_Pin1, GPIO.OUT)
+    GPIO.setup(Motor_A_Pin2, GPIO.OUT)
+    GPIO.setup(Motor_B_Pin1, GPIO.OUT)
+    GPIO.setup(Motor_B_Pin2, GPIO.OUT)
 
-# Función para mover los servomotores
-def mover_servos(angulo1, angulo2):
-    duty1 = angulo1 / 18 + 2
-    duty2 = angulo2 / 18 + 2
-    GPIO.output(SERVO_PIN_1, True)
-    GPIO.output(SERVO_PIN_2, True)
-    servo1.ChangeDutyCycle(duty1)
-    servo2.ChangeDutyCycle(duty2)
-    time.sleep(1)
-    GPIO.output(SERVO_PIN_1, False)
-    GPIO.output(SERVO_PIN_2, False)
-    servo1.ChangeDutyCycle(0)
-    servo2.ChangeDutyCycle(0)
-    print(f"Servos movidos a {angulo1}° y {angulo2}°")
+    motorStop()
+    pwm_A = GPIO.PWM(Motor_A_EN, 1000)
+    pwm_B = GPIO.PWM(Motor_B_EN, 1000)
+    pwm_A.start(0)
+    pwm_B.start(0)
 
-# Función que se ejecuta cuando te conectas al broker MQTT
+def motor_A(direction, speed):
+    if direction == 1:
+        GPIO.output(Motor_A_Pin1, GPIO.HIGH)
+        GPIO.output(Motor_A_Pin2, GPIO.LOW)
+    elif direction == 0:
+        GPIO.output(Motor_A_Pin1, GPIO.LOW)
+        GPIO.output(Motor_A_Pin2, GPIO.HIGH)
+    pwm_A.ChangeDutyCycle(speed)
+
+def motor_B(direction, speed):
+    if direction == 1:
+        GPIO.output(Motor_B_Pin1, GPIO.HIGH)
+        GPIO.output(Motor_B_Pin2, GPIO.LOW)
+    elif direction == 0:
+        GPIO.output(Motor_B_Pin1, GPIO.LOW)
+        GPIO.output(Motor_B_Pin2, GPIO.HIGH)
+    pwm_B.ChangeDutyCycle(speed)
+
 def on_connect(client, userdata, flags, reasonCode, properties=None):
     print(f"Conectado con código de resultado {reasonCode}")
     client.subscribe("Car/Control")
 
-# Función que se ejecuta cuando se recibe un mensaje en un tópico suscrito
 def on_message(client, userdata, msg):
     mensaje = msg.payload.decode().lower()
     print(f"Mensaje recibido en {msg.topic}: {mensaje}")
     if mensaje == "adelante":
-        mover_servos(90, 90)  # Mover ambos servos hacia adelante
+        motor_A(1, 100)
+        motor_B(0, 100)
     elif mensaje == "atras":
-        mover_servos(0, 0)  # Mover ambos servos hacia atrás
+        motor_A(0, 100)
+        motor_B(1, 100)
     elif mensaje == "izquierda":
-        mover_servos(45, 90)  # Girar a la izquierda
+        motor_A(0, 100)
+        motor_B(0, 100)
     elif mensaje == "derecha":
-        mover_servos(90, 45)  # Girar a la derecha
+        motor_A(1, 100)
+        motor_B(1, 100)
+    time.sleep(3)
+    motorStop()
 
 # Configuración del cliente MQTT
 client = mqtt.Client()
@@ -61,16 +87,16 @@ client.connect("10.25.83.216", 1883, 60)
 # Inicio de un hilo para manejar la red y las callbacks
 client.loop_start()
 
-# Bucle principal para enviar mensajes desde la consola
+setup()
+
+# Bucle principal para mantener el script en ejecución
 try:
     while True:
-        mensaje = input("Ingresa 'adelante', 'atras', 'izquierda' o 'derecha' para mover el carrito: ")
-        client.publish("Car/Control", mensaje)
+        time.sleep(1)
 except KeyboardInterrupt:
     print("Desconectando...")
-    # Finaliza el hilo loop
     client.loop_stop()
     client.disconnect()
     GPIO.cleanup()
-    servo1.stop()
-    servo2.stop()
+    pwm_A.stop()
+    pwm_B.stop()
