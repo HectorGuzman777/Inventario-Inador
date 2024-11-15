@@ -73,8 +73,10 @@ def on_message(client, userdata, msg):
     elif mensaje == "derecha":
         motor_A(1, 100)
         motor_B(1, 100)
-    time.sleep(3)
-    motorStop()
+    elif mensaje == "stop":
+        motorStop()
+    else:
+        print("Comando no reconocido")
 
 # Configuración del cliente MQTT
 client = mqtt.Client()
@@ -82,7 +84,7 @@ client.on_connect = on_connect
 client.on_message = on_message
 
 # Conexión al broker MQTT (cambiar host y puerto si es necesario)
-client.connect("10.25.83.216", 1883, 60)
+client.connect("192.168.181.97", 1883, 60)
 
 # Inicio de un hilo para manejar la red y las callbacks
 client.loop_start()
@@ -97,6 +99,7 @@ except KeyboardInterrupt:
     print("Desconectando...")
     client.loop_stop()
     client.disconnect()
+    motorStop()
     GPIO.cleanup()
     pwm_A.stop()
     pwm_B.stop()
